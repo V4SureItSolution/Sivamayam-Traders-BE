@@ -66,6 +66,14 @@ def create_app():
     app.register_blueprint(permissions_bp)
     app.register_blueprint(payment_tracking_bp)
 
+    @app.route('/', methods=['GET'])
+    def index():
+        return {
+            "status": "running",
+            "message": "Sivamayam Traders backend is working",
+            "health_url": "/api/health"
+        }, 200
+
     # Health Check Route
     @app.route('/api/health', methods=['GET'])
     def health_check():
