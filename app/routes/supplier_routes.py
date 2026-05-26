@@ -607,7 +607,7 @@ def create_item(supplier_id):
             name=data['name'].strip(),
             type=data.get('type', '').strip() if data.get('type') else None,
             model=data['model'].strip(),
-            watts=float(data.get('watts', 0)),
+            watts=str(data.get('watts', '')).strip() if data.get('watts') is not None else '',
             buy_price=float(data['buy_price']),
             supplier_id=supplier_id,
             status=data.get('status', 'Active'),
@@ -661,7 +661,7 @@ def update_item(item_id):
         if data.get('model'):
             item.model = data['model'].strip()
         if 'watts' in data:
-            item.watts = float(data['watts']) if data['watts'] else 0
+            item.watts = str(data['watts']).strip() if data['watts'] else ''
         if 'buy_price' in data:
             item.buy_price = float(data['buy_price']) if data['buy_price'] else 0
         if 'status' in data:
@@ -813,7 +813,7 @@ def bulk_create_items():
                     name=item_data['name'].strip(),
                     type=item_data.get('type', '').strip() if item_data.get('type') else None,
                     model=item_data['model'].strip(),
-                    watts=float(item_data.get('watts', 0)),
+                    watts=str(item_data.get('watts', '')).strip() if item_data.get('watts') is not None else '',
                     buy_price=float(item_data['buy_price']),
                     supplier_id=supplier_id,
                     status=item_data.get('status', 'Active'),
@@ -890,7 +890,7 @@ def bulk_update_items():
                 if 'model' in item_data:
                     item.model = item_data['model'].strip()
                 if 'watts' in item_data:
-                    item.watts = float(item_data['watts']) if item_data['watts'] else 0
+                    item.watts = str(item_data['watts']).strip() if item_data['watts'] else ''
                 if 'buy_price' in item_data:
                     item.buy_price = float(item_data['buy_price']) if item_data['buy_price'] else 0
                 if 'status' in item_data:

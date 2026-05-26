@@ -41,7 +41,7 @@ class Item(db.Model):
     name = db.Column(db.String(100), nullable=False)
     type = db.Column(db.String(50))
     model = db.Column(db.String(100), nullable=False)
-    watts = db.Column(db.Float, default=0)
+    watts = db.Column(db.String(50), default='')
     buy_price = db.Column(db.Float, nullable=False)
     supplier_id = db.Column(db.Integer, db.ForeignKey('suppliers.id'), nullable=False)
 
@@ -62,7 +62,7 @@ class Item(db.Model):
             'name': self.name,
             'type': self.type,
             'model': self.model,
-            'watts': self.watts,
+            'watts': self.watts or '',
             'buy_price': self.buy_price,
             'supplier_id': self.supplier_id,
             'status': self.status,           
