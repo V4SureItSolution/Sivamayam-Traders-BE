@@ -11,7 +11,7 @@ class Employee(db.Model):
     employee_id = db.Column(db.String(50), unique=True, nullable=False, index=True)
     full_name = db.Column(db.String(200), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
-    password_hash = db.Column(db.String(200))  # New password field
+    password_hash = db.Column(db.String(200))
     phone_number = db.Column(db.String(20))
     
     # Employment details
@@ -21,7 +21,7 @@ class Employee(db.Model):
     current_company = db.Column(db.String(200))
     company_id = db.Column(db.Integer, db.ForeignKey('companies.id'), nullable=True)
     
-    # User type field (references name in user_types table)
+    # User type field
     user_type = db.Column(db.String(50), nullable=False, default='employee')
     
     # Personal details
@@ -57,7 +57,6 @@ class Employee(db.Model):
             'employee_id': self.employee_id,
             'full_name': self.full_name,
             'email': self.email,
-            # Don't include password_hash in dictionary
             'phone_number': self.phone_number,
             'department': self.department,
             'designation': self.designation,

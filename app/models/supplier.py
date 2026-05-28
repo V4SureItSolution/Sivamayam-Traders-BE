@@ -71,3 +71,40 @@ class Item(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+
+# ── NEW: SupplierReturn model ──
+class SupplierReturn(db.Model):
+    __tablename__ = 'supplier_returns'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, nullable=True)          # original item id (may be deleted)
+    item_name = db.Column(db.String(100), nullable=False)
+    model = db.Column(db.String(100))                        # HSN code
+    watts = db.Column(db.String(50))                         # original volume
+    buy_price = db.Column(db.Float)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('suppliers.id', ondelete='SET NULL'), nullable=True)
+    supplier_name = db.Column(db.String(100))
+    company_name = db.Column(db.String(100))
+    returned_volume = db.Column(db.String(100), nullable=False)
+    is_full_return = db.Column(db.Boolean, default=False)
+    returned_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<SupplierReturn {self.item_name} - {self.returned_at}>"
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'item_id': self.item_id,
+            'item_name': self.item_name,
+            'model': self.model,
+            'watts': self.watts or '',
+            'buy_price': self.buy_price,
+            'supplier_id': self.supplier_id,
+            'supplier_name': self.supplier_name or '',
+            'company_name': self.company_name or '',
+            'returned_volume': self.returned_volume,
+            'is_full_return': self.is_full_return,
+            'returned_at': self.returned_at.isoformat() if self.returned_at else None,
+        }

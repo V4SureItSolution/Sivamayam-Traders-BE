@@ -13,6 +13,7 @@ jwt = JWTManager()
 
 def create_app():
     app = Flask(__name__)
+    CORS(app)
     print("Creating Flask App...")
     app.config.from_object(Config)
 
@@ -27,7 +28,11 @@ def create_app():
     CORS(
         app,
         supports_credentials=True,
-        resources={r"/*": {"origins": ["http://localhost:3000", "http://localhost:5000"]}},
+        resources={r"/*": {"origins": [
+            "http://localhost:3000",
+            "http://localhost:3001",  # ← ADDED: your React is running on 3001
+            "http://localhost:5000"
+        ]}},
     )
 
     # Import models so Flask-Migrate detects them
@@ -58,10 +63,10 @@ def create_app():
     app.register_blueprint(invoice_bp, url_prefix='/api')
     app.register_blueprint(service_bp)
     app.register_blueprint(user_type_bp)
-    app.register_blueprint(employee_bp,url_prefix="/api")
+    app.register_blueprint(employee_bp, url_prefix="/api")
     app.register_blueprint(attendance_bp)
     app.register_blueprint(company_bp)
-    app.register_blueprint(enquiry_bp,url_prefix="/api") 
+    app.register_blueprint(enquiry_bp, url_prefix="/api")
     app.register_blueprint(discount_bp)
     app.register_blueprint(permissions_bp)
     app.register_blueprint(payment_tracking_bp)
