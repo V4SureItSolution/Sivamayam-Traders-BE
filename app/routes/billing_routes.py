@@ -314,15 +314,45 @@ def create_bill():
             db.session.add(payment)
             db.session.commit()
         
-        # Return response - hide discount details from employee
+        # Prepare serialized bill object to return (authoritative server state)
+        try:
+            bill_serialized = {
+                'id': bill.id,
+                'billNumber': bill.bill_number,
+                'createdAt': bill.created_at.isoformat() if hasattr(bill, 'created_at') and bill.created_at else None,
+                'subtotal': round(bill.subtotal, 2) if hasattr(bill, 'subtotal') else None,
+                'discount': round(bill.discount, 2),
+                'discountType': bill.discount_type,
+                'tax': round(bill.tax, 2),
+                'taxType': bill.tax_type,
+                'total': round(bill.total, 2),
+                'paidAmount': round(bill.paid_amount, 2),
+                'changeAmount': round(bill.change_amount, 2) if hasattr(bill, 'change_amount') else 0,
+                'items': [
+                    {
+                        'id': it.id,
+                        'productId': it.product_id,
+                        'productName': it.product_name,
+                        'productModel': it.product_model,
+                        'sellPrice': float(it.sell_price),
+                        'quantity': int(it.quantity),
+                        'total': float(it.total)
+                    } for it in bill.items
+                ]
+            }
+        except Exception:
+            bill_serialized = None
+
+        # Return response - include saved bill snapshot so frontend can use server timestamps and saved item ids
         return jsonify({
             'success': True,
             'message': 'Bill created successfully',
             'billNumber': bill.bill_number,
             'billId': bill.id,
             'total': round(bill.total, 2),
-            'changeAmount': round(bill.change_amount, 2),
-            'items': items_added
+            'changeAmount': round(bill.change_amount, 2) if hasattr(bill, 'change_amount') else 0,
+            'items': items_added,
+            'bill': bill_serialized
         }), 201
         
     except Exception as e:
@@ -823,6 +853,12 @@ def cancel_bill(bill_id):
     """Cancel a bill and restore stock"""
     try:
         bill = Bill.query.get_or_404(bill_id)
+        # Read optional remarks from request
+        try:
+            req_data = request.get_json(silent=True) or {}
+        except Exception:
+            req_data = {}
+        cancel_remarks = req_data.get('remarks') or req_data.get('reason') or None
         
         # Restore product quantities for items that are not completed
         for item in bill.items:
@@ -831,24 +867,145 @@ def cancel_bill(bill_id):
                 if product:
                     product.quantity += item.quantity
         
-        # Update payment status
+        # Update payment status to refunded and attach remarks if provided
+        payments_updated = False
         for payment in bill.payments:
-            payment.status = 'refunded'
-        
-        # Delete bill (or mark as cancelled)
-        db.session.delete(bill)  # Or add a 'cancelled' field to Bill model
-        
+            try:
+                payment.status = 'refunded'
+                if cancel_remarks and not getattr(payment, 'notes', None):
+                    payment.notes = cancel_remarks
+                payments_updated = True
+            except Exception:
+                pass
+
+        # If there were no payments to annotate, create a zero-amount refund record to store remarks
+        if cancel_remarks and not payments_updated:
+            try:
+                refund_payment = Payment(
+                    bill_id=bill.id,
+                    payment_id=f"REFUND-{bill.bill_number}-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+                    amount=0.0,
+                    method='refund',
+                    status='refunded',
+                    notes=cancel_remarks
+                )
+                db.session.add(refund_payment)
+            except Exception:
+                pass
+
+        # Mark bill items as cancelled (but keep record)
+        for item in bill.items:
+            try:
+                item.item_status = 'cancelled'
+            except Exception:
+                pass
+
+        # Update bill summary/payment status to indicate cancellation
+        try:
+            bill.payment_status = 'cancelled'
+        except Exception:
+            bill.payment_status = 'pending'
+
+        # Optionally append suffix to bill number to indicate cancellation (safe-guard uniqueness)
+        try:
+            if not str(bill.bill_number).endswith('-CANCELLED'):
+                bill.bill_number = f"{bill.bill_number}-CANCELLED"
+        except Exception:
+            pass
+
+        # Commit all changes (do NOT delete the bill row to avoid FK integrity issues)
         db.session.commit()
-        
+
+        # Build a compact bill snapshot for the response
+        bill_snapshot = {
+            'id': bill.id,
+            'billNumber': bill.bill_number,
+            'paymentStatus': bill.payment_status,
+            'total': round(bill.total, 2) if hasattr(bill, 'total') else None,
+            'paidAmount': round(bill.paid_amount, 2) if hasattr(bill, 'paid_amount') else None,
+            'createdAt': bill.created_at.isoformat() if hasattr(bill, 'created_at') and bill.created_at else None,
+            'items': [
+                {
+                    'id': it.id,
+                    'productId': it.product_id,
+                    'productName': it.product_name,
+                    'quantity': int(it.quantity),
+                    'itemStatus': it.item_status
+                } for it in bill.items
+            ],
+            'payments': [
+                {
+                    'id': p.id,
+                    'paymentId': getattr(p, 'payment_id', None),
+                    'amount': float(p.amount) if hasattr(p, 'amount') else None,
+                    'status': getattr(p, 'status', None)
+                } for p in bill.payments
+            ]
+        }
+
         return jsonify({
             'success': True,
-            'message': 'Bill cancelled successfully'
+            'message': 'Bill marked cancelled and payments refunded',
+            'bill': bill_snapshot
         }), 200
         
     except Exception as e:
         db.session.rollback()
         print(f"Cancel bill error: {str(e)}")
         return jsonify({"error": str(e)}), 400
+
+
+# ------------------ GET CANCELLED BILLS ------------------
+@billing_bp.route("/billing/bills/canceled", methods=["GET"])
+def get_cancelled_bills():
+    """Return recently cancelled bills for the UI Cancelled Bills view"""
+    try:
+        # Find bills marked cancelled by payment_status or by bill number suffix
+        cancelled_bills = Bill.query.filter(
+            or_(Bill.payment_status == 'cancelled', Bill.bill_number.ilike('%-CANCELLED'))
+        ).order_by(Bill.updated_at.desc()).limit(500).all()
+
+        result = []
+        for b in cancelled_bills:
+            # Try to extract a cancellation remark from any refunded payment notes
+            cancel_remarks = ''
+            for p in getattr(b, 'payments', []) or []:
+                if getattr(p, 'status', '') == 'refunded' and getattr(p, 'notes', None):
+                    cancel_remarks = p.notes
+                    break
+
+            # Build a compact items preview to match other bill endpoints
+            items_preview = []
+            for it in getattr(b, 'items', [])[:5]:
+                try:
+                    items_preview.append({
+                        'id': it.id,
+                        'productId': it.product_id,
+                        'productName': getattr(it, 'product_name', None) or getattr(it, 'productName', None) or None,
+                        'quantity': int(getattr(it, 'quantity', 0)),
+                        'total': float(getattr(it, 'total', 0))
+                    })
+                except Exception:
+                    continue
+
+            result.append({
+                'id': b.id,
+                'billNumber': b.bill_number,
+                'customerName': b.customer_name,
+                'customerPhone': b.customer_phone,
+                'total': round(b.total, 2),
+                'updatedAt': b.updated_at.isoformat() if b.updated_at else None,
+                'cancelRemarks': cancel_remarks,
+                'items': items_preview,
+                'itemCount': len(getattr(b, 'items', []) or [])
+            })
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        print(f"Get cancelled bills error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({'error': 'Failed to fetch cancelled bills'}), 500
 
 
 # ------------------ GET BILLING STATISTICS ------------------

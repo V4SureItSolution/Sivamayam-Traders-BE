@@ -44,10 +44,14 @@ def create_product():
 
         product = Product(
             name=data.get("name", "").strip(),
+            model=data.get("model", "").strip(),
+            type=data.get("type", "").strip(),
+            watts=float(data.get("watts", 0)) if data.get("watts") else None,
             quantity=int(data.get("quantity", 0)),
-            volume=data.get("volume", "").strip(),
-            hsn_code=data.get("hsnCode", "").strip(),
+            buy_price=float(data.get("buyPrice", 0)),
             sell_price=float(data.get("sellPrice", 0)),
+            profit_percent=float(data.get("profitPercent", 0)) if data.get("profitPercent") else None,
+            amount=float(data.get("amount", 0)) if data.get("amount") else None,
         )
 
         db.session.add(product)
@@ -106,12 +110,20 @@ def update_product(id):
             product.name = data['name'].strip()
         if data.get('quantity') is not None:
             product.quantity = int(data['quantity'])
-        if data.get('volume') is not None:
-            product.volume = data['volume'].strip()
-        if data.get('hsnCode') is not None:
-            product.hsn_code = data['hsnCode'].strip()
+        if data.get('model') is not None:
+            product.model = data['model'].strip()
+        if data.get('type') is not None:
+            product.type = data['type'].strip()
+        if data.get('watts') is not None:
+            product.watts = float(data['watts']) if data['watts'] else None
+        if data.get('buyPrice') is not None:
+            product.buy_price = float(data['buyPrice'])
         if data.get('sellPrice') is not None:
             product.sell_price = float(data['sellPrice'])
+        if data.get('profitPercent') is not None:
+            product.profit_percent = float(data['profitPercent']) if data['profitPercent'] else None
+        if data.get('amount') is not None:
+            product.amount = float(data['amount']) if data['amount'] else None
 
         db.session.commit()
 
