@@ -50,8 +50,7 @@ def create_product():
             quantity=int(data.get("quantity", 0)),
             buy_price=float(data.get("buyPrice", 0)),
             sell_price=float(data.get("sellPrice", 0)),
-            profit_percent=float(data.get("profitPercent", 0)) if data.get("profitPercent") else None,
-            amount=float(data.get("amount", 0)) if data.get("amount") else None,
+            category=data.get("category", "").strip(),
         )
 
         db.session.add(product)
@@ -120,10 +119,8 @@ def update_product(id):
             product.buy_price = float(data['buyPrice'])
         if data.get('sellPrice') is not None:
             product.sell_price = float(data['sellPrice'])
-        if data.get('profitPercent') is not None:
-            product.profit_percent = float(data['profitPercent']) if data['profitPercent'] else None
-        if data.get('amount') is not None:
-            product.amount = float(data['amount']) if data['amount'] else None
+        if data.get('category') is not None:
+            product.category = data['category'].strip()
 
         db.session.commit()
 
@@ -174,6 +171,7 @@ def bulk_create_products():
                     volume=product_data.get("volume", "").strip(),
                     hsn_code=product_data.get("hsnCode", "").strip(),
                     sell_price=float(product_data.get("sellPrice", 0)),
+                    category=product_data.get("category", "").strip(),
                 )
 
                 db.session.add(product)

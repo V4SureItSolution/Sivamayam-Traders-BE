@@ -4,13 +4,12 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_req
 from datetime import datetime, date
 from sqlalchemy import and_, func
 from app import db
-from app.models import Attendance, Employee
+from app.models import Attendance, Employee, HRConfig
 import logging
 
 from flask_cors import CORS
 
 attendance_bp = Blueprint('attendance', __name__)
-CORS(attendance_bp)
 logger = logging.getLogger(__name__)
 
 
@@ -414,5 +413,122 @@ def update_attendance(attendance_id):
         
     except Exception as e:
         logger.error(f"Update attendance error: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@attendance_bp.route('/monthly-list', methods=['GET'])
+def list_monthly_attendance():
+    """Get monthly summary for all employees for a given month/year"""
+    try:
+        month = request.args.get('month', datetime.now().month, type=int)
+        year = request.args.get('year', datetime.now().year, type=int)
+        
+        employees = Employee.query.all()
+        results = []
+        
+        for emp in employees:
+            attendances = Attendance.query.filter(
+                Attendance.employee_id == emp.id,
+                func.month(Attendance.date) == month,
+                func.year(Attendance.date) == year
+            ).all()
+            
+            present = sum(1 for a in attendances if a.status == 'present')
+            leave = sum(1 for a in attendances if a.status == 'leave')
+            paid_leave = sum(1 for a in attendances if a.status == 'paid_leave')
+            half_day = sum(1 for a in attendances if a.status == 'half_day')
+            absent = sum(1 for a in attendances if a.status == 'absent')
+            
+            effective_days = present + paid_leave + (half_day * 0.5)
+            
+            results.append({
+                'employee_id': emp.id,
+                'employee_name': emp.full_name,
+                'present': present,
+                'leave': leave,
+                'paid_leave': paid_leave,
+                'half_day': half_day,
+                'absent': absent,
+                'effective_days': effective_days
+            })
+            
+        return jsonify(results), 200
+    except Exception as e:
+        logger.error(f"Monthly list error: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+@attendance_bp.route('/list', methods=['GET'])
+def list_attendance():
+    "Get attendance for all employees for a given date. Auto-creates records as 'present' if missing."
+    try:
+        date_str = request.args.get('date')
+        if not date_str:
+            target_date = date.today()
+        else:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+        employees = Employee.query.all()
+        results = []
+        
+        for emp in employees:
+            attendance = Attendance.query.filter_by(employee_id=emp.id, date=target_date).first()
+            
+            if not attendance:
+                attendance = Attendance(
+                    employee_id=emp.id,
+                    date=target_date,
+                    status='present'
+                )
+                attendance.employee = emp  # Explicitly set to ensure to_dict() works
+                db.session.add(attendance)
+                db.session.flush()
+                
+            results.append(attendance.to_dict())
+            
+        db.session.commit()
+        return jsonify(results), 200
+        
+    except Exception as e:
+        logger.error(f'List attendance error: {str(e)}')
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+@attendance_bp.route('/get-config', methods=['GET'])
+def get_attendance_config():
+    """Get monthly working days config"""
+    try:
+        month = request.args.get('month', datetime.now().month, type=int)
+        year = request.args.get('year', datetime.now().year, type=int)
+        
+        config = HRConfig.query.filter_by(month=month, year=year).first()
+        if not config:
+            # Default to 22
+            return jsonify({'month': month, 'year': year, 'working_days': 22}), 200
+            
+        return jsonify(config.to_dict()), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@attendance_bp.route('/set-config', methods=['POST'])
+def set_attendance_config():
+    """Set monthly working days config"""
+    try:
+        data = request.get_json()
+        month = data.get('month')
+        year = data.get('year')
+        working_days = data.get('working_days', 22)
+        
+        if not month or not year:
+            return jsonify({'error': 'Month and year required'}), 400
+            
+        config = HRConfig.query.filter_by(month=month, year=year).first()
+        if config:
+            config.working_days = working_days
+        else:
+            config = HRConfig(month=month, year=year, working_days=working_days)
+            db.session.add(config)
+            
+        db.session.commit()
+        return jsonify(config.to_dict()), 200
+    except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

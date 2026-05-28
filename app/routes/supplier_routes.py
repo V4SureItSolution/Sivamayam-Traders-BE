@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, make_response, send_from_directory
 from app import db
-from app.models.supplier import Supplier, Item
+from app.models.supplier import Supplier, Item, SupplierReturn
 from datetime import datetime
 import traceback
 import os
@@ -975,5 +975,181 @@ def bulk_delete_suppliers():
     except Exception as e:
         db.session.rollback()
         print(f"Bulk delete error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+# ==================== SUPPLIER RETURN ROUTES ====================
+
+@supplier_bp.route("/api/supplier-returns", methods=["POST", "OPTIONS"])
+def create_supplier_return():
+    """
+    Create a return record and delete the original item.
+    Body JSON fields:
+        item_id, item_name, model, watts, buy_price,
+        supplier_id, supplier_name, company_name,
+        returned_volume, is_full_return
+    """
+    try:
+        if request.method == 'OPTIONS':
+            response = make_response()
+            return response
+
+        print("=" * 50)
+        print("↩️  POST /api/supplier-returns called")
+
+        if not request.is_json:
+            return jsonify({"error": "Content-Type must be application/json"}), 400
+
+        data = request.get_json()
+        print(f"Return data received: {data}")
+
+        # Validate required fields
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+        if not data.get('item_name'):
+            return jsonify({"error": "item_name is required"}), 400
+        if not data.get('returned_volume'):
+            return jsonify({"error": "returned_volume is required"}), 400
+
+        item_id = data.get('item_id')
+
+        # --- Delete the original item from supplier management ---
+        if item_id:
+            item = Item.query.get(item_id)
+            if item:
+                # Delete attachment file if present
+                if item.attachment:
+                    try:
+                        filename = item.attachment.split('/')[-1] if '/' in item.attachment else item.attachment
+                        file_path = os.path.join(UPLOAD_FOLDER, filename)
+                        if os.path.exists(file_path) and os.path.isfile(file_path):
+                            os.remove(file_path)
+                            print(f"📎 Attachment deleted: {file_path}")
+                    except Exception as e:
+                        print(f"Error deleting attachment: {str(e)}")
+                db.session.delete(item)
+                print(f"🗑️  Item {item_id} marked for deletion")
+            else:
+                print(f"⚠️  Item {item_id} not found — creating return record only")
+
+        # --- Create the return record ---
+        return_record = SupplierReturn(
+            item_id=item_id,
+            item_name=data['item_name'],
+            model=data.get('model', ''),
+            watts=data.get('watts', ''),
+            buy_price=float(data['buy_price']) if data.get('buy_price') is not None else None,
+            supplier_id=data.get('supplier_id'),
+            supplier_name=data.get('supplier_name', ''),
+            company_name=data.get('company_name', ''),
+            returned_volume=data['returned_volume'],
+            is_full_return=bool(data.get('is_full_return', False)),
+        )
+
+        db.session.add(return_record)
+        db.session.commit()
+
+        print(f"✅ Return record created with ID: {return_record.id}")
+        print("=" * 50)
+
+        return jsonify({
+            'success': True,
+            'message': 'Product returned successfully and added to Return Products Report.',
+            'return': return_record.to_dict()
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Create return error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+
+@supplier_bp.route("/api/supplier-returns", methods=["GET", "OPTIONS"])
+def get_supplier_returns():
+    """Fetch all supplier return records, newest first."""
+    try:
+        if request.method == 'OPTIONS':
+            response = make_response()
+            return response
+
+        print("📋 GET /api/supplier-returns called")
+
+        returns = SupplierReturn.query.order_by(SupplierReturn.returned_at.desc()).all()
+
+        return jsonify({
+            'success': True,
+            'returns': [r.to_dict() for r in returns]
+        }), 200
+
+    except Exception as e:
+        print(f"Get returns error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": "Failed to fetch return records"}), 400
+
+
+@supplier_bp.route("/api/supplier-returns/<int:return_id>", methods=["DELETE", "OPTIONS"])
+def delete_supplier_return(return_id):
+    """Delete a single return record."""
+    try:
+        if request.method == 'OPTIONS':
+            response = make_response()
+            return response
+
+        print(f"🗑️ DELETE /api/supplier-returns/{return_id} called")
+
+        record = SupplierReturn.query.get(return_id)
+        if not record:
+            return jsonify({"error": "Return record not found"}), 404
+
+        db.session.delete(record)
+        db.session.commit()
+
+        print(f"✅ Return record {return_id} deleted")
+
+        return jsonify({
+            'success': True,
+            'message': 'Return record deleted successfully'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Delete return error: {str(e)}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(e)}), 400
+
+
+@supplier_bp.route("/api/supplier-returns/bulk-delete", methods=["POST", "OPTIONS"])
+def bulk_delete_supplier_returns():
+    """Delete multiple return records at once."""
+    try:
+        if request.method == 'OPTIONS':
+            response = make_response()
+            return response
+
+        print("🗑️ POST /api/supplier-returns/bulk-delete called")
+
+        data = request.get_json()
+        return_ids = data.get('return_ids', [])
+
+        if not return_ids:
+            return jsonify({"error": "No return IDs provided"}), 400
+
+        deleted_count = SupplierReturn.query.filter(
+            SupplierReturn.id.in_(return_ids)
+        ).delete(synchronize_session=False)
+
+        db.session.commit()
+
+        print(f"✅ {deleted_count} return records deleted")
+
+        return jsonify({
+            'success': True,
+            'message': f'{deleted_count} return records deleted successfully'
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"Bulk delete returns error: {str(e)}")
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 400

@@ -1,6 +1,8 @@
+# app/models/__init__.py
+
 from app.models.attendance import Attendance
 from app.models.billing import Bill, BillItem, Payment
-from app.models.discount import DiscountRange, DiscountLog  
+from app.models.discount import DiscountRange, DiscountLog
 from app.models.employee import Employee
 from app.models.invoice import Invoice, InvoiceItem
 from app.models.login import login
@@ -11,13 +13,25 @@ from app.models.supplier import Supplier, Item
 from app.models.usertype import UserType
 from app.models.enquiry import Enquiry
 
+# Import HRConfig if it exists, otherwise skip
+try:
+    from app.models.hrconfig import HRConfig
+except ImportError:
+    pass
+
+# Import Company if it exists
+try:
+    from app.models.current_company import Company
+except ImportError:
+    pass
+
 __all__ = [
     'Attendance',
     'Bill',
     'BillItem',
     'Payment',
-    'DiscountRange',  
-    'DiscountLog',    
+    'DiscountRange',
+    'DiscountLog',
     'Employee',
     'Invoice',
     'InvoiceItem',
@@ -31,4 +45,6 @@ __all__ = [
     'Item',
     'UserType',
     'Enquiry',
+    'HRConfig',
+    'Company',
 ]
