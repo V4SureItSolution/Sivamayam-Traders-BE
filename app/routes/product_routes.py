@@ -48,6 +48,7 @@ def create_product():
             volume=data.get("volume", "").strip(),
             hsn_code=data.get("hsnCode", "").strip(),
             sell_price=float(data.get("sellPrice", 0)),
+            category=data.get("category", "").strip(),
         )
 
         db.session.add(product)
@@ -112,6 +113,8 @@ def update_product(id):
             product.hsn_code = data['hsnCode'].strip()
         if data.get('sellPrice') is not None:
             product.sell_price = float(data['sellPrice'])
+        if data.get('category') is not None:
+            product.category = data['category'].strip()
 
         db.session.commit()
 
@@ -162,6 +165,7 @@ def bulk_create_products():
                     volume=product_data.get("volume", "").strip(),
                     hsn_code=product_data.get("hsnCode", "").strip(),
                     sell_price=float(product_data.get("sellPrice", 0)),
+                    category=product_data.get("category", "").strip(),
                 )
 
                 db.session.add(product)

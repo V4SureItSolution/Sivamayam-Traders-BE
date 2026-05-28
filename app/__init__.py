@@ -23,11 +23,11 @@ def create_app():
     # Initialize JWT
     jwt.init_app(app)
 
-    # Enable CORS
+    # Enable CORS - allow specific origins for credentials mode
     CORS(
         app,
         supports_credentials=True,
-        resources={r"/*": {"origins": "*"}},
+        resources={r"/*": {"origins": ["http://localhost:3000", "http://localhost:5000"]}},
     )
 
     # Import models so Flask-Migrate detects them

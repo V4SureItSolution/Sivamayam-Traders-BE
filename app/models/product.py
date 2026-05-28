@@ -12,16 +12,18 @@ class Product(db.Model):
     hsn_code   = db.Column(db.String(50), nullable=True)
     buy_price  = db.Column(db.Float, nullable=False, default=0.0)
     sell_price = db.Column(db.Float, nullable=False, default=0.0)
+    category   = db.Column(db.String(100), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
-            "id":        self.id,
-            "name":      self.name,
-            "quantity":  self.quantity,
-            "volume":    self.volume   or "",
-            "hsnCode":   self.hsn_code or "",
-            "sellPrice": self.sell_price or 0.0,
+            "id":         self.id,
+            "name":       self.name,
+            "quantity":   self.quantity,
+            "volume":     self.volume     or "",
+            "hsnCode":    self.hsn_code   or "",
+            "sellPrice":  self.sell_price or 0.0,
+            "category":   self.category   or "",
             "created_at": self.created_at,
         }

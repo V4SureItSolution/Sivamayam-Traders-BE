@@ -45,7 +45,7 @@ def record_params(setup_state):
     if not app.secret_key:
         # Generate a secret key for the app
         app.config['SECRET_KEY'] = secrets.token_hex(32)
-        print(f"✅ Secret key configured for employee blueprint")
+        print(f"Secret key configured for employee blueprint")
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -83,15 +83,6 @@ def generate_employee_id():
             return "EMP001"
     return "EMP001"
 
-def validate_user_type(user_type_name):
-    """Validate that user_type exists in the database"""
-    user_type = UserType.query.filter_by(name=user_type_name).first()
-    if not user_type:
-        # Get all valid user types for error message
-        valid_types = UserType.query.all()
-        valid_type_names = [ut.name for ut in valid_types]
-        raise ValueError(f"Invalid user_type: {user_type_name}. Must be one of: {', '.join(valid_type_names)}")
-    return user_type
 
 # ========== AUTHENTICATION ROUTES ==========
 
@@ -132,14 +123,21 @@ def employee_login():
         session['company_name'] = employee.current_company
         session['logged_in'] = True
         
-        # Fetch permissions
-        user_type_data = UserType.query.filter(func.lower(UserType.name) == func.lower(employee.user_type)).first()
-        permissions = {}
-        if user_type_data and user_type_data.permissions:
+        # Fetch permissions (Individual override or Role fallback)
+        permissions = []
+        if employee.permissions:
             try:
-                permissions = json.loads(user_type_data.permissions)
+                permissions = json.loads(employee.permissions)
             except Exception:
-                permissions = {}
+                permissions = []
+        
+        if not permissions:
+            user_type_data = UserType.query.filter(func.lower(UserType.name) == func.lower(employee.user_type)).first()
+            if user_type_data and user_type_data.permissions:
+                try:
+                    permissions = json.loads(user_type_data.permissions)
+                except Exception:
+                    permissions = []
 
         # Return user info
         return jsonify({
@@ -175,14 +173,22 @@ def check_login():
     """Check if user is logged in"""
     if 'user_id' in session:
         # Fetch permissions
-        user_type_name = session.get('user_type')
-        user_type_data = UserType.query.filter(func.lower(UserType.name) == func.lower(user_type_name)).first() if user_type_name else None
-        permissions = {}
-        if user_type_data and user_type_data.permissions:
+        employee = Employee.query.get(session.get('user_id'))
+        permissions = []
+        if employee and employee.permissions:
             try:
-                permissions = json.loads(user_type_data.permissions)
+                permissions = json.loads(employee.permissions)
             except Exception:
-                permissions = {}
+                permissions = []
+        
+        if not permissions:
+            user_type_name = session.get('user_type')
+            user_type_data = UserType.query.filter(func.lower(UserType.name) == func.lower(user_type_name)).first() if user_type_name else None
+            if user_type_data and user_type_data.permissions:
+                try:
+                    permissions = json.loads(user_type_data.permissions)
+                except Exception:
+                    permissions = []
 
         return jsonify({
             'logged_in': True,
@@ -210,14 +216,21 @@ def get_current_user():
             session.clear()
             return jsonify({'error': 'User not found'}), 404
         
-        # Fetch permissions
-        user_type_data = UserType.query.filter(func.lower(UserType.name) == func.lower(employee.user_type)).first()
-        permissions = {}
-        if user_type_data and user_type_data.permissions:
+        # Fetch permissions (Individual override or Role fallback)
+        permissions = []
+        if employee.permissions:
             try:
-                permissions = json.loads(user_type_data.permissions)
+                permissions = json.loads(employee.permissions)
             except Exception:
-                permissions = {}
+                permissions = []
+        
+        if not permissions:
+            user_type_data = UserType.query.filter(func.lower(UserType.name) == func.lower(employee.user_type)).first()
+            if user_type_data and user_type_data.permissions:
+                try:
+                    permissions = json.loads(user_type_data.permissions)
+                except Exception:
+                    permissions = []
 
         return jsonify({
             'user': {
@@ -297,12 +310,8 @@ def create_employee():
         if existing_email:
             return jsonify({'error': 'Email already exists'}), 400
         
-        # Get user_type and validate from database
+        # Get user_type
         user_type = request.form.get('user_type', 'employee')
-        try:
-            validate_user_type(user_type)
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 400
         
         # Handle date of joining
         date_of_joining = None
@@ -361,6 +370,7 @@ def create_employee():
             emergency_contact=request.form.get('emergency_contact'),
             blood_group=request.form.get('blood_group'),
             marital_status=request.form.get('marital_status'),
+            basic_salary=float(request.form.get('basic_salary', 0) or 0),
             aadhar_attachment=aadhar_filename,
             pan_attachment=pan_filename
         )
@@ -393,14 +403,10 @@ def update_employee(id):
             if existing_email:
                 return jsonify({'error': 'Email already exists'}), 400
         
-        # Update user_type with validation from database if provided
+        # Update user_type if provided
         user_type = request.form.get('user_type')
         if user_type:
-            try:
-                validate_user_type(user_type)
-                employee.user_type = user_type
-            except ValueError as e:
-                return jsonify({'error': str(e)}), 400
+            employee.user_type = user_type
         
         # Handle date of joining
         if request.form.get('date_of_joining'):
@@ -478,6 +484,11 @@ def update_employee(id):
             employee.blood_group = request.form.get('blood_group')
         if request.form.get('marital_status'):
             employee.marital_status = request.form.get('marital_status')
+        if request.form.get('basic_salary') is not None:
+            try:
+                employee.basic_salary = float(request.form.get('basic_salary') or 0)
+            except:
+                pass
         
         db.session.commit()
         
@@ -527,12 +538,6 @@ def delete_employee(id):
 def get_employees_by_type(user_type):
     """Get employees by user type"""
     try:
-        # Validate user_type from database
-        try:
-            validate_user_type(user_type)
-        except ValueError as e:
-            return jsonify({'error': str(e)}), 400
-        
         employees = Employee.query.filter_by(user_type=user_type).order_by(Employee.created_at.desc()).all()
         return jsonify([employee.to_dict() for employee in employees]), 200
     except Exception as e:
