@@ -439,12 +439,22 @@ def list_monthly_attendance():
             half_day = sum(1 for a in attendances if a.status == 'half_day')
             absent = sum(1 for a in attendances if a.status == 'absent')
             
-            effective_days = present + paid_leave + (half_day * 0.5)
+            # Fetch working days to accurately calculate present days by default
+            config = HRConfig.query.filter_by(month=month, year=year).first()
+            monthly_working_days = config.working_days if config else 22
+            
+            # Auto-mark present assumption
+            effective_days = monthly_working_days - leave - absent - (half_day * 0.5)
+            if effective_days < 0:
+                effective_days = 0
+            
+            # Estimate actual present for display if it wasn't auto-generated for every day
+            display_present = max(present, int(effective_days - paid_leave))
             
             results.append({
                 'employee_id': emp.id,
                 'employee_name': emp.full_name,
-                'present': present,
+                'present': display_present,
                 'leave': leave,
                 'paid_leave': paid_leave,
                 'half_day': half_day,
@@ -471,19 +481,25 @@ def list_attendance():
         results = []
         
         for emp in employees:
-            attendance = Attendance.query.filter_by(employee_id=emp.id, date=target_date).first()
-            
-            if not attendance:
-                attendance = Attendance(
-                    employee_id=emp.id,
-                    date=target_date,
-                    status='present'
-                )
-                attendance.employee = emp  # Explicitly set to ensure to_dict() works
-                db.session.add(attendance)
-                db.session.flush()
+            try:
+                attendance = Attendance.query.filter_by(employee_id=emp.id, date=target_date).first()
                 
-            results.append(attendance.to_dict())
+                if not attendance:
+                    attendance = Attendance(
+                        employee_id=emp.id,
+                        date=target_date,
+                        status='present'
+                    )
+                    attendance.employee = emp  # Explicitly set to ensure to_dict() works
+                    db.session.add(attendance)
+                    db.session.flush()
+                    
+                results.append(attendance.to_dict())
+            except Exception as e:
+                logger.error(f"Error processing employee {emp.id} attendance: {str(e)}")
+                # Don't rollback the whole session yet, we'll try to get as many as possible
+                # But since it's a flush error, we might need to rollback and skip
+                db.session.rollback()
             
         db.session.commit()
         return jsonify(results), 200

@@ -17,7 +17,7 @@ class Attendance(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationship
-    employee = db.relationship('Employee', backref='attendances')
+    employee = db.relationship('Employee', backref=db.backref('attendances', cascade='all, delete-orphan'))
     
     def to_dict(self):
         return {

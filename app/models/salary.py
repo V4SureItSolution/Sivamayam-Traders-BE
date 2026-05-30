@@ -19,7 +19,7 @@ class Salary(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationship
-    employee = db.relationship('Employee', backref='salaries')
+    employee = db.relationship('Employee', backref=db.backref('salaries', cascade='all, delete-orphan'))
     
     def to_dict(self):
         return {

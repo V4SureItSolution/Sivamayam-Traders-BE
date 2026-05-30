@@ -42,8 +42,15 @@ def calculate_salaries():
             paid_leaves = sum(1 for a in attendances if a.status == 'paid_leave')
             half_days = sum(1 for a in attendances if a.status == 'half_day')
             
-            # Effective paid days = Present + Paid Leaves + (Half Days * 0.5)
-            effective_days = present_days + paid_leaves + (half_days * 0.5)
+            # Effective paid days = Working days - Unpaid Leaves - Absents - (Half Days * 0.5)
+            # This satisfies "Attendance will be marked present automatically untill admin mark absent"
+            unpaid_leaves = sum(1 for a in attendances if a.status == 'leave')
+            absent_days = sum(1 for a in attendances if a.status == 'absent')
+            
+            effective_days = monthly_working_days - unpaid_leaves - absent_days - (half_days * 0.5)
+            if effective_days < 0:
+                effective_days = 0
+                
             per_day_rate = emp.basic_salary or 0
             calculated_salary = effective_days * per_day_rate
             
@@ -57,6 +64,7 @@ def calculate_salaries():
                     status='pending'
                 )
                 db.session.add(salary_record)
+                db.session.flush()  # Flush to get the ID and populate relationships
             else:
                 salary_record.basic_salary = per_day_rate
                 salary_record.calculated_salary = round(calculated_salary, 2)

@@ -54,6 +54,7 @@ def create_app():
     from app.routes.discount_routes import discount_bp
     from app.routes.permissions_routes import permissions_bp
     from app.routes.payment_routes import payment_tracking_bp
+    from app.routes.salary_routes import salary_bp
 
     app.register_blueprint(login_bp, url_prefix="/api")
     app.register_blueprint(product_bp, url_prefix="/api")
@@ -64,7 +65,8 @@ def create_app():
     app.register_blueprint(service_bp)
     app.register_blueprint(user_type_bp)
     app.register_blueprint(employee_bp, url_prefix="/api")
-    app.register_blueprint(attendance_bp)
+    app.register_blueprint(attendance_bp, url_prefix="/api/attendance")
+    app.register_blueprint(salary_bp, url_prefix="/api/salary")
     app.register_blueprint(company_bp)
     app.register_blueprint(enquiry_bp, url_prefix="/api")
     app.register_blueprint(discount_bp)

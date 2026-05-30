@@ -305,6 +305,32 @@ def create_employee():
         )
         db.session.add(employee)
         db.session.commit()
+
+        # --- Automatically create attendance record for today ---
+        from app.models.attendance import Attendance
+        today = datetime.utcnow().date()
+        attendance = Attendance(
+            employee_id=employee.id,
+            date=today,
+            status='present',
+            check_in_time=datetime.utcnow()
+        )
+        db.session.add(attendance)
+
+        # --- Automatically create salary record for current month/year ---
+        from app.models.salary import Salary
+        now = datetime.utcnow()
+        salary = Salary(
+            employee_id=employee.id,
+            month=now.month,
+            year=now.year,
+            basic_salary=employee.basic_salary,
+            calculated_salary=employee.basic_salary,
+            status='pending'
+        )
+        db.session.add(salary)
+
+        db.session.commit()
         return jsonify(employee.to_dict()), 201
     except Exception as e:
         db.session.rollback()
